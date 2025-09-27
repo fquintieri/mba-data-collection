@@ -23,7 +23,7 @@
 	"portsAttributes": {
 		"8888": {
 			"label": "JupyterLab",
-			"onAutoForward": "openBrowser" // Abre o JupyterLab automaticamente no navegador.
+			"onAutoForward": "notify" // Abre o JupyterLab automaticamente no navegador.
 		},
 		"9001": {
 			"label": "MinIO Console",
