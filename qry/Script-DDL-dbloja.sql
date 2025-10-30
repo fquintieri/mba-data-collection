@@ -40,7 +40,7 @@ CREATE TABLE db_loja.produto (
     data_atualizacao TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP, -- Registra a última modificação do produto. Será atualizado automaticamente pelo Trigger.
    CONSTRAINT fk_categoria                 -- Nome da restrição.
         FOREIGN KEY(id_categoria)           -- Coluna nesta tabela.
-        REFERENCES db_loja.categorias_produtos(id) -- Tabela e coluna referenciadas.
+        REFERENCES db_loja.categorias_produto(id) -- Tabela e coluna referenciadas.
 );
 
 -- Tabela: clientes
@@ -63,7 +63,7 @@ CREATE TABLE db_loja.pedido_cabecalho (
     valor_total NUMERIC(10, 2) NOT NULL,    -- Valor total do pedido.
     CONSTRAINT fk_cliente
         FOREIGN KEY(id_cliente)
-        REFERENCES db_loja.clientes(id)
+        REFERENCES db_loja.cliente(id)
 );
 
 -- Tabela: pedido_itens
@@ -79,7 +79,7 @@ CREATE TABLE db_loja.pedido_itens (
         REFERENCES db_loja.pedido_cabecalho(id),
     CONSTRAINT fk_produto
         FOREIGN KEY(id_produto)
-        REFERENCES db_loja.produtos(id)
+        REFERENCES db_loja.produto(id)
 );
 
 
