@@ -1,7 +1,8 @@
-# -- coding: utf-8 --
+# -- coding: utf-8 -- 
 """
 Ingestão incremental das tabelas db_loja (a partir do Script-DDL-dbloja.sql)
-Cria novas pastas a cada execução: data_ingestao=YYYY-MM-DD_NN
+Cria novas pastas a cada execução: bronze/dbloja/data=YYYYMMDD/
+Cada arquivo parquet: 20251101_HHMMSS_tabela.parquet
 """
 
 from minio import Minio
@@ -21,13 +22,17 @@ ACCESS_KEY = "minioadmin"
 SECRET_KEY = "minioadmin"
 SECURE = False
 
+
 def parse_sql_file(sql_path):
     """Extrai tabelas e dados do SQL PostgreSQL."""
     with open(sql_path, "r", encoding="utf-8") as f:
         content = f.read()
+
     content = re.sub(r'--.*', '', content)
     content = re.sub(r'\s+', ' ', content)
     data = {}
+
+    # Identifica tabelas CREATE TABLE
     create_pattern = rf"CREATE TABLE\s+(?:{SCHEMA}\.)?(\w+)\s*\((.*?)\);"
     for match in re.finditer(create_pattern, content, re.IGNORECASE):
         table = match.group(1)
@@ -40,6 +45,8 @@ def parse_sql_file(sql_path):
             if col_match:
                 cols.append(col_match.group(1))
         data[table] = {"columns": cols, "rows": []}
+
+    # Identifica inserts
     insert_pattern = rf"INSERT INTO\s+(?:{SCHEMA}\.)?(\w+)\s*\((.+?)\)\s*VALUES\s(.*?);"
     for match in re.finditer(insert_pattern, content, re.IGNORECASE):
         table = match.group(1)
@@ -52,6 +59,7 @@ def parse_sql_file(sql_path):
             data[table]["rows"].append(dict(zip(cols, vals)))
     return data
 
+
 def main():
     print("🧩 Extraindo tabelas do arquivo SQL...")
     data = parse_sql_file(SQL_FILE)
@@ -59,28 +67,38 @@ def main():
         print("⚠ Nenhuma tabela encontrada.")
         return
 
+    # Conexão com MinIO
     client = Minio(MINIO_ENDPOINT, access_key=ACCESS_KEY, secret_key=SECRET_KEY, secure=SECURE)
     if not client.bucket_exists(BUCKET_NAME):
         client.make_bucket(BUCKET_NAME)
 
-    today = datetime.now().strftime("%Y-%m-%d")
-    existing = [o.object_name for o in client.list_objects(BUCKET_NAME, prefix=f"{BRONZE_PREFIX}/data_ingestao={today}", recursive=False)]
-    ids = [int(m.group(1)) for n in existing if (m := re.search(r"data_ingestao=\d{4}-\d{2}-\d{2}_(\d+)", n))]
-    next_id = max(ids, default=0) + 1
-    folder = f"data_ingestao={today}_{next_id:02d}"
-    base_path = f"{BRONZE_PREFIX}/{folder}/"
+    # Data e hora para nomear arquivos e pasta
+    today = datetime.now().strftime("%Y%m%d")
+    hour = datetime.now().strftime("%H%M%S")
 
+    # Nova estrutura: bronze/dbloja/data=YYYYMMDD/
+    base_path = f"{BRONZE_PREFIX}/data={today}/"
     print(f"📁 Nova pasta: {base_path}")
+
+    # Geração e upload dos arquivos parquet
     for table, tbl_data in data.items():
         df = pd.DataFrame(tbl_data["rows"]).convert_dtypes()
         parquet = BytesIO()
         df.to_parquet(parquet, index=False)
         parquet.seek(0)
-        object_name = f"{base_path}{table}.parquet"
-        client.put_object(BUCKET_NAME, object_name, parquet, length=len(parquet.getvalue()), content_type="application/octet-stream")
+
+        object_name = f"{base_path}{today}_{hour}_{table}.parquet"
+        client.put_object(
+            BUCKET_NAME,
+            object_name,
+            parquet,
+            length=len(parquet.getvalue()),
+            content_type="application/octet-stream"
+        )
         print(f"✅ {table} enviada -> {object_name}")
 
     print("🏁 Ingestão incremental concluída com sucesso!")
+
 
 if __name__ == "__main__":
     main()
